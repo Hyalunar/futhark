@@ -33,11 +33,13 @@ import Language.LSP.Protocol.Types
     Position (..),
     Range (..),
     TextDocumentIdentifier,
+    TextEdit (..),
     type (|?) (..),
   )
 import Language.LSP.Server (runServerWithHandles)
 import Language.LSP.Test
   ( Session,
+    applyEdit,
     createDoc,
     defaultConfig,
     documentContents,
@@ -49,7 +51,9 @@ import Language.LSP.Test
     getDefinitions,
     getHover,
     message,
+    noDiagnostics,
     runSessionWithHandles,
+    waitForDiagnostics,
   )
 import NeatInterpolation (text)
 import System.IO (hClose)
@@ -259,6 +263,29 @@ testInlayTypeHint =
         "def plus5 x : i32 = x + 5i32"
         [(Position 0 10, "("), (Position 0 11, ": i32)")]
 
+testDiagnosticFix :: TestTree
+testDiagnosticFix = serverTestCase "test diagnostic fix" $ do
+  mainDoc <- createMainDoc "def pi : i32 = 3"
+
+  _ <-
+    applyEdit mainDoc $
+      TextEdit
+        { _newText = "4",
+          _range = Range (Position 0 11) (Position 0 12)
+        }
+  waitForDiagnostics
+    >>= liftIO . \case
+      [_] -> pure ()
+      bad -> assertFailure $ "Expected one diagnostic but got: " ++ show bad
+
+  _ <-
+    applyEdit mainDoc $
+      TextEdit
+        { _newText = "2",
+          _range = Range (Position 0 11) (Position 0 12)
+        }
+  noDiagnostics
+
 tests :: TestTree
 tests =
   testGroup
@@ -267,5 +294,6 @@ tests =
       testDefinition,
       testFormatting,
       testEvaluationComment,
-      testInlayTypeHint
+      testInlayTypeHint,
+      testDiagnosticFix
     ]
